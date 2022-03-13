@@ -1,26 +1,28 @@
-mod object;
-mod file_manager;
+mod config;
+mod loader;
+mod location;
 
-use std::path::Path;
-use self::object::Database;
+use loader::Loader;
 
-use crate::kinds::Key;
+use crate::objects::{Key, Object};
 
-struct Repository {
-    raw_path: String,
-    database: Database,
+struct Repository<'a> {
+    loader: Loader<'a>
 }
 
-impl Repository {
-    pub fn new(raw_path: &String) -> Repository {
+impl<'a> Repository<'a> {
+    pub fn new(base_path: &str) -> Repository {
         Repository {
-            raw_path: raw_path.clone(),
-            database: Database::new("db".to_string())
+            loader: Loader::from(base_path).unwrap()
         }
     }
 
-    pub fn load_object(&self, key: &Key) -> Option<Vec<u8>> {
-        self.database.load_data(&self.raw_path, &key)
+    pub fn load_object(&mut self, key: &Key) -> Option<Object<u8>> {
+        if self.loader.check_data_exists(key) {
+            Some(self.loader.load_data(key).unwrap())
+        } else {
+            None
+        }
     }
 
 

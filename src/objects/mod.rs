@@ -1,13 +1,11 @@
 mod commit;
 mod delta;
-mod tree;
+mod structure;
 
-use self::{commit::CommitData, delta::DeltaData, tree::TreeDataNode};
+use self::{commit::CommitData, delta::DeltaData, structure::{StructureEntry}};
 
 use core::hash::Hash;
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
-use std::fmt;
 use std::vec::Vec;
 
 pub type Key = String;
@@ -18,12 +16,12 @@ pub type Key = String;
 //
 //TODO add support for different base types
 #[derive(Serialize, Deserialize)]
-pub enum Kind<T>
+pub enum Object<T>
 where
     T: Eq + Hash + Ord + Clone,
 {
     File { data: Vec<T> },
     Delta { data: DeltaData<T>, base: Key },
-    Tree { data_root: TreeDataNode },
+    Structure { data: Vec<StructureEntry> },
     Commit { data: CommitData },
 }
