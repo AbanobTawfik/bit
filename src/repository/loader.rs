@@ -13,12 +13,12 @@ fn load_file_bytes(path: &str) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut file = File::open(path)?;
     let mut buf = Vec::<u8>::new();
 
-    file.read_to_end(&mut buf);
+    file.read_to_end(&mut buf)?;
 
     Ok(buf)
 }
 
-fn load_dictionaries<'a, 'b>(path: &'a str) -> Result<(CDict<'b>, DDict<'b>), Box<dyn Error>> {
+fn load_dictionaries(path: &str) -> Result<(CDict<'static>, DDict<'static>), Box<dyn Error>> {
     let buf = load_file_bytes(path)?;
 
     Ok(
@@ -40,15 +40,15 @@ fn construct_path(psuedo_path: &Vec<&str>) -> String {
 }
 
 // Dictionary must outlive the context
-pub struct Loader<'a> {
+pub struct Loader {
     base_path: String,
-    cdict: CDict<'a>,
-    ddict: DDict<'a>,
-    cctx: CCtx<'a>,
-    dctx: DCtx<'a>,
+    cdict: CDict<'static>,
+    ddict: DDict<'static>,
+    cctx: CCtx<'static>,
+    dctx: DCtx<'static>,
 }
 
-impl<'a> Loader<'a> {
+impl Loader {
     pub fn from(base_path: &str) -> Result<Loader, Box<dyn Error>> {
         let dict_path = construct_path(&vec![base_path, CONFIG_DICTIONARY]);
 
@@ -58,8 +58,8 @@ impl<'a> Loader<'a> {
         let mut dctx = DCtx::create();
 
 
-        cctx.ref_cdict(&cdict);
-        dctx.ref_ddict(&ddict);
+        cctx.ref_cdict(&cdict).map_err(|x| format!("Compression Dictionary Error: {}", x))?;
+        dctx.ref_ddict(&ddict).map_err(|x| format!("Decompression Dictionary Error: {}", x))?;
 
         Ok(
             Loader {
@@ -72,21 +72,25 @@ impl<'a> Loader<'a> {
         )
     }
 
-    pub fn check_data_exists(&self, key: &Key) -> bool {
-        let path = construct_path(&vec![self.base_path.as_str(), DIR_OBJECTS, key.as_str()]);
-
-        Path::new(&path).exists()
-    }
-
     pub fn load_data(&mut self, key: &Key) -> Result<Object<u8>, Box<dyn Error>> {
         let path = construct_path(&vec![self.base_path.as_str(), DIR_OBJECTS, key.as_str()]);
 
         let encoded = load_file_bytes(path.as_str())?;
         let mut decoded = vec![0u8; encoded.len()];
         
-        decompress_dctx(&mut self.dctx, decoded.as_mut_slice(), encoded.as_slice());
+        decompress_dctx(&mut self.dctx, decoded.as_mut_slice(), encoded.as_slice()).map_err(|x| format!("Decompression error: {}", x))?;
     
         Ok(rmp_serde::decode::from_slice(decoded.as_slice())?)
+    }
+
+    pub fn check_load_data(&mut self, key: &Key) -> Option<Object<u8>> {
+        let path = construct_path(&vec![self.base_path.as_str(), DIR_OBJECTS, key.as_str()]);
+
+        if !Path::new(path.as_str()).exists() {
+            return None;
+        }
+
+        Some(self.load_data(key).unwrap())
     }
 }
 
